@@ -1,4 +1,6 @@
 from .api_key import ApiKey
+from .chat_message import ChatMessage
+from .chat_session import ChatSession
 from .file import File
 from .flow import Flow
 from .folder import Folder
@@ -9,6 +11,8 @@ from .variable import Variable
 
 __all__ = [
     "ApiKey",
+    "ChatMessage",
+    "ChatSession",
     "File",
     "Flow",
     "Folder",
