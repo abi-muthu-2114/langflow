@@ -10,8 +10,8 @@ from sqlmodel import JSON, Column, Field, SQLModel
 class WidgetMessageBase(SQLModel):
     """Base model for widget messages."""
 
-    session_id: UUID = Field(foreign_key="widget_session.id", description="Widget session this message belongs to")
-    flow_id: UUID = Field(foreign_key="flow.id", description="Flow used for this message")
+    session_id: UUID = Field(index=True, foreign_key="widget_session.id", description="Widget session this message belongs to")
+    flow_id: UUID | None = Field(default=None, index=True, foreign_key="flow.id", description="Flow used for this message")
     user_message: str = Field(sa_column=Column(Text), description="User's message")
     assistant_message: str = Field(sa_column=Column(Text), description="Assistant's response")
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), description="Message timestamp")

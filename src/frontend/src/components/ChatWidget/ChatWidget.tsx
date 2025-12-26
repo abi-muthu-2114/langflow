@@ -4,11 +4,9 @@ import {
     X,
     Plus,
     Send,
-    Trash2,
-    ChevronRight,
     Hash,
     Loader2,
-    Maximized2,
+    Maximize2,
     Minimize2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -38,9 +36,9 @@ export const ChatWidget: React.FC = () => {
     const [inputValue, setInputValue] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [isInitializing, setIsInitializing] = useState(true);
+    const [isMaximized, setIsMaximized] = useState(false);
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
-    const flowId = "default-flow-id"; // In a real app, this would be passed as a prop or found in context
 
     // Initialize: load sessions if any
     useEffect(() => {
@@ -115,21 +113,23 @@ export const ChatWidget: React.FC = () => {
         e?.preventDefault();
         if (!inputValue.trim() || isLoading || !activeSessionId) return;
 
+        const currentSession = sessions.find(s => s.session_id === activeSessionId);
+        if (!currentSession) return;
+
         const userMsg = inputValue;
         setInputValue('');
         setIsLoading(true);
 
         try {
-            const response = await axios.post('/api/v1/chat/widget', {
+            const response = await axios.post<Message>('/api/v1/chat/widget', {
                 session_id: activeSessionId,
                 message: userMsg,
-                flow_id: "00000000-0000-0000-0000-000000000000" // Should match session's flow_id
+                flow_id: currentSession.flow_id || "00000000-0000-0000-0000-000000000000"
             });
 
             setMessages(prev => [...prev, response.data]);
         } catch (error) {
             console.error("Failed to send message", error);
-            // Fallback/UI error handling could go here
         } finally {
             setIsLoading(false);
         }
@@ -160,42 +160,60 @@ export const ChatWidget: React.FC = () => {
             <AnimatePresence>
                 {isOpen && (
                     <motion.div
-                        className="chat-window shadow-2xl overflow-hidden flex flex-col"
+                        className={`chat-window shadow-2xl overflow-hidden flex flex-col ${isMaximized ? 'maximized' : ''}`}
                         initial={{ opacity: 0, y: 20, scale: 0.9 }}
                         animate={{ opacity: 1, y: 0, scale: 1 }}
                         exit={{ opacity: 0, y: 20, scale: 0.9 }}
                         transition={{ type: 'spring', damping: 20, stiffness: 300 }}
                     >
                         {/* Header / Tabs */}
-                        <div className="chat-header p-2 border-b flex items-center gap-2 overflow-x-auto scrollbar-hide">
-                            {sessions.map((session) => (
-                                <div
-                                    key={session.session_id}
-                                    className={`chat-tab flex items-center gap-2 px-3 py-1.5 rounded-lg cursor-pointer transition-all ${activeSessionId === session.session_id
+                        <div className="chat-header p-2 border-b flex items-center justify-between gap-2 bg-background/80 backdrop-blur-md">
+                            <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide flex-1">
+                                {sessions.map((session) => (
+                                    <div
+                                        key={session.session_id}
+                                        className={`chat-tab flex items-center gap-2 px-3 py-1.5 rounded-lg cursor-pointer transition-all ${activeSessionId === session.session_id
                                             ? 'bg-primary text-primary-foreground shadow-sm'
                                             : 'hover:bg-muted'
-                                        }`}
-                                    onClick={() => setActiveSessionId(session.session_id)}
+                                            }`}
+                                        onClick={() => setActiveSessionId(session.session_id)}
+                                    >
+                                        <Hash size={14} className="opacity-50" />
+                                        <span className="text-sm font-medium whitespace-nowrap">{session.session_name}</span>
+                                        <X
+                                            size={12}
+                                            className="hover:text-destructive transition-colors ml-1"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                deleteSession(session.session_id);
+                                            }}
+                                        />
+                                    </div>
+                                ))}
+                            </div>
+                            <div className="flex items-center gap-1">
+                                <button
+                                    onClick={createNewSession}
+                                    className="p-1.5 rounded-lg hover:bg-muted transition-colors"
+                                    title="New Chat"
                                 >
-                                    <Hash size={14} className="opacity-50" />
-                                    <span className="text-sm font-medium whitespace-nowrap">{session.session_name}</span>
-                                    <X
-                                        size={12}
-                                        className="hover:text-destructive transition-colors ml-1"
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            deleteSession(session.session_id);
-                                        }}
-                                    />
-                                </div>
-                            ))}
-                            <button
-                                onClick={createNewSession}
-                                className="p-1.5 rounded-lg hover:bg-muted transition-colors flex-shrink-0"
-                                title="New Chat"
-                            >
-                                <Plus size={18} />
-                            </button>
+                                    <Plus size={18} />
+                                </button>
+                                <button
+                                    onClick={() => setIsMaximized(!isMaximized)}
+                                    className="p-1.5 rounded-lg hover:bg-muted transition-colors"
+                                    title={isMaximized ? "Restore" : "Maximize"}
+                                >
+                                    {isMaximized ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
+                                </button>
+                                <button
+                                    onClick={() => setIsOpen(false)}
+                                    className="p-1.5 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
+                                    title="Close"
+                                >
+                                    <X size={18} />
+                                </button>
+                            </div>
                         </div>
 
                         {/* Chat Content */}

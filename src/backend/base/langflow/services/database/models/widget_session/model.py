@@ -11,7 +11,7 @@ class WidgetSessionBase(SQLModel):
     """Base model for widget sessions."""
 
     session_name: str = Field(sa_column=Column(Text), description="Name of the chat session/tab")
-    flow_id: UUID = Field(foreign_key="flow.id", description="Flow associated with this chat session")
+    flow_id: UUID | None = Field(default=None, foreign_key="flow.id", description="Flow associated with this chat session")
     user_id: UUID | None = Field(default=None, foreign_key="user.id", nullable=True, description="User who owns this session")
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), description="Session creation timestamp")
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), description="Last update timestamp")
