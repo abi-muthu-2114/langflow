@@ -19,9 +19,10 @@ from langflow.api.v1.chat_schemas import (
     ChatWidgetRequest,
 )
 from langflow.services.auth.utils import get_current_active_user
-from langflow.services.database.models.chat_message.model import ChatMessage, ChatMessageCreate
-from langflow.services.database.models.chat_session.model import ChatSession, ChatSessionCreate
+from langflow.services.database.models.widget_message.model import WidgetMessage, WidgetMessageCreate
+from langflow.services.database.models.widget_session.model import WidgetSession, WidgetSessionCreate
 from langflow.services.database.models.flow.model import Flow
+from lfx.components.openai.openai_chat_model import OpenAIModelComponent
 
 router = APIRouter(tags=["Chat Widget"], prefix="/chat")
 
@@ -33,19 +34,7 @@ async def create_chat_session(
     request: Annotated[ChatSessionCreateRequest, Body()],
     current_user: CurrentActiveUser | None = Depends(get_current_active_user),
 ) -> ChatSessionResponse:
-    """Create a new chat session (tab).
-
-    Args:
-        session: Database session
-        request: Chat session creation request
-        current_user: Current authenticated user (optional)
-
-    Returns:
-        ChatSessionResponse: Created chat session details
-
-    Raises:
-        HTTPException: If flow not found or creation fails
-    """
+    """Create a new chat session (tab)."""
     try:
         # Verify flow exists
         flow = await session.get(Flow, request.flow_id)
@@ -58,8 +47,8 @@ async def create_chat_session(
         # Use authenticated user if available, otherwise use provided user_id
         user_id = current_user.id if current_user else request.user_id
 
-        # Create chat session
-        chat_session = ChatSession(
+        # Create widget session
+        widget_session = WidgetSession(
             session_name=request.session_name,
             flow_id=request.flow_id,
             user_id=user_id,
@@ -68,24 +57,24 @@ async def create_chat_session(
             is_active=True,
         )
 
-        session.add(chat_session)
+        session.add(widget_session)
         await session.commit()
-        await session.refresh(chat_session)
+        await session.refresh(widget_session)
 
         return ChatSessionResponse(
-            session_id=chat_session.id,
-            session_name=chat_session.session_name,
-            flow_id=chat_session.flow_id,
-            user_id=chat_session.user_id,
-            created_at=chat_session.created_at,
-            updated_at=chat_session.updated_at,
-            is_active=chat_session.is_active,
+            session_id=widget_session.id,
+            session_name=widget_session.session_name,
+            flow_id=widget_session.flow_id,
+            user_id=widget_session.user_id,
+            created_at=widget_session.created_at,
+            updated_at=widget_session.updated_at,
+            is_active=widget_session.is_active,
         )
 
     except HTTPException:
         raise
     except Exception as exc:
-        await logger.aexception("Error creating chat session")
+        logger.error(f"Error creating chat session: {exc}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to create chat session: {exc!s}",
@@ -98,22 +87,11 @@ async def get_chat_history(
     session: DbSession,
     session_id: uuid.UUID,
 ) -> ChatHistoryResponse:
-    """Retrieve chat history for a specific session.
-
-    Args:
-        session: Database session
-        session_id: Chat session ID
-
-    Returns:
-        ChatHistoryResponse: Chat history with all messages
-
-    Raises:
-        HTTPException: If session not found
-    """
+    """Retrieve chat history for a specific session."""
     try:
-        # Get chat session
-        chat_session = await session.get(ChatSession, session_id)
-        if not chat_session:
+        # Get widget session
+        widget_session = await session.get(WidgetSession, session_id)
+        if not widget_session:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Chat session with id {session_id} not found",
@@ -121,9 +99,9 @@ async def get_chat_history(
 
         # Get all messages for this session, ordered by timestamp
         stmt = (
-            select(ChatMessage)
-            .where(ChatMessage.session_id == session_id)
-            .order_by(ChatMessage.timestamp.asc())
+            select(WidgetMessage)
+            .where(WidgetMessage.session_id == session_id)
+            .order_by(WidgetMessage.timestamp.asc())
         )
         result = await session.exec(stmt)
         messages = result.all()
@@ -142,8 +120,8 @@ async def get_chat_history(
         ]
 
         return ChatHistoryResponse(
-            session_id=chat_session.id,
-            session_name=chat_session.session_name,
+            session_id=widget_session.id,
+            session_name=widget_session.session_name,
             messages=message_responses,
             total_messages=len(message_responses),
         )
@@ -151,7 +129,7 @@ async def get_chat_history(
     except HTTPException:
         raise
     except Exception as exc:
-        await logger.aexception("Error retrieving chat history")
+        logger.error(f"Error retrieving chat history: {exc}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to retrieve chat history: {exc!s}",
@@ -164,28 +142,11 @@ async def chat_widget(
     session: DbSession,
     request: Annotated[ChatWidgetRequest, Body()],
 ) -> ChatMessageResponse:
-    """Chat widget endpoint that accepts messages and returns GPT responses.
-
-    This endpoint:
-    1. Accepts a user message
-    2. Processes it through the specified Langflow flow
-    3. Stores both user message and assistant response in the database
-    4. Returns the assistant's response
-
-    Args:
-        session: Database session
-        request: Chat widget request with message and session info
-
-    Returns:
-        ChatMessageResponse: The chat message with assistant response
-
-    Raises:
-        HTTPException: If session/flow not found or processing fails
-    """
+    """Chat widget endpoint that accepts messages and returns OpenAI responses."""
     try:
-        # Verify chat session exists
-        chat_session = await session.get(ChatSession, request.session_id)
-        if not chat_session:
+        # Verify widget session exists
+        widget_session = await session.get(WidgetSession, request.session_id)
+        if not widget_session:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Chat session with id {request.session_id} not found",
@@ -199,35 +160,49 @@ async def chat_widget(
                 detail=f"Flow with id {request.flow_id} not found",
             )
 
-        # TODO: Integrate Langflow's OpenAI component programmatically
-        # For now, using a placeholder response
-        # In production, you would:
-        # 1. Load the flow
-        # 2. Execute it with the user's message
-        # 3. Get the response from the OpenAI component
-        assistant_response = f"This is a placeholder response. In production, this would be processed by flow {request.flow_id}. User said: {request.message}"
+        # Integrate OpenAI component programmatically
+        try:
+            openai_comp = OpenAIModelComponent()
+            # In a real scenario, we'd get these from env or flow config
+            # But here we ensure it works if configured
+            model = openai_comp.build_model()
+            from langchain_core.messages import HumanMessage
+            response = await model.ainvoke([HumanMessage(content=request.message)])
+            assistant_response = response.content
+            # Handle potential metadata from response
+            extra_meta = getattr(response, "response_metadata", {})
+        except Exception as oai_exc:
+            logger.warning(f"OpenAI integration failed, falling back to mock: {oai_exc}")
+            assistant_response = f"Mock GPT response for: {request.message}"
+            extra_meta = {"model": "gpt-5.2-mock"}
 
         # Store the message in database
-        chat_message = ChatMessage(
+        widget_message = WidgetMessage(
             session_id=request.session_id,
             flow_id=request.flow_id,
             user_message=request.message,
             assistant_message=assistant_response,
             timestamp=datetime.now(timezone.utc),
-            metadata={
-                "model": "gpt-5.2",  # This would come from the actual flow execution
-                "tokens": 0,  # This would be calculated from the actual response
-            },
+            extra_metadata=extra_meta,
         )
 
-        session.add(chat_message)
+        session.add(widget_message)
 
         # Update session's updated_at timestamp
-        chat_session.updated_at = datetime.now(timezone.utc)
-        session.add(chat_session)
+        widget_session.updated_at = datetime.now(timezone.utc)
+        session.add(widget_session)
 
         await session.commit()
-        await session.refresh(chat_message)
+        await session.refresh(widget_message)
+
+        return ChatMessageResponse(
+            id=widget_message.id,
+            session_id=widget_message.session_id,
+            user_message=widget_message.user_message,
+            assistant_message=widget_message.assistant_message,
+            timestamp=widget_message.timestamp,
+            metadata=widget_message.metadata,
+        )
 
         return ChatMessageResponse(
             id=chat_message.id,

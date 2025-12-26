@@ -15,7 +15,7 @@ class ChatMessageBase(SQLModel):
     user_message: str = Field(sa_column=Column(Text), description="User's message")
     assistant_message: str = Field(sa_column=Column(Text), description="Assistant's response")
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), description="Message timestamp")
-    metadata: dict = Field(default_factory=dict, sa_column=Column(JSON), description="Additional metadata (tokens, model, etc.)")
+    extra_metadata: dict | None = Field(default_factory=dict, sa_column=Column("metadata", JSON), description="Additional metadata (tokens, model, etc.)")
 
 
 class ChatMessage(ChatMessageBase, table=True):  # type: ignore[call-arg]

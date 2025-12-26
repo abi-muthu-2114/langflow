@@ -8,6 +8,8 @@ from .message import MessageTable
 from .transactions import TransactionTable
 from .user import User
 from .variable import Variable
+from .widget_message import WidgetMessage
+from .widget_session import WidgetSession
 
 __all__ = [
     "ApiKey",
@@ -20,4 +22,6 @@ __all__ = [
     "TransactionTable",
     "User",
     "Variable",
+    "WidgetMessage",
+    "WidgetSession",
 ]
