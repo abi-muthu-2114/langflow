@@ -193,23 +193,18 @@ async def chat_widget(
                             field="openai_api_key",
                             session=session,
                         )
-                except Exception:
+                except Exception:  # noqa: BLE001
                     # ignore and fallback to env check below
-                    api_key = (
-                        api_key
-                        or "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"
-                    )
+                    pass
             if not api_key:
-                raise RuntimeError("OPENAI_API_KEY not set")
+                msg = "OPENAI_API_KEY not set"
+                raise RuntimeError(msg)
             model_name = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
             payload = {
                 "model": model_name,
                 "messages": [{"role": "user", "content": request.message}],
             }
-            headers = {
-                "Authorization": f"Bearer {'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'}",
-                "Content-Type": "application/json",
-            }
+            headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
             async with httpx.AsyncClient(timeout=30.0) as client:
                 resp = await client.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload)
                 resp.raise_for_status()
